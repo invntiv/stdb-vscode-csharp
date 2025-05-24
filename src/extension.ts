@@ -1,0 +1,481 @@
+import * as vscode from 'vscode';
+import { exec } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+
+export function activate(context: vscode.ExtensionContext) {
+    console.log('SpacetimeDB extension is now active!');
+
+    // Register commands
+    const createModuleCommand = vscode.commands.registerCommand('spacetimedb.createModule', createModuleClass);
+    const createTableCommand = vscode.commands.registerCommand('spacetimedb.createTable', createTable);
+    const createReducerCommand = vscode.commands.registerCommand('spacetimedb.createReducer', createReducer);
+    const createClientConnectionCommand = vscode.commands.registerCommand('spacetimedb.createClientConnection', createClientConnection);
+    const generateBindingsCommand = vscode.commands.registerCommand('spacetimedb.generateBindings', generateBindings);
+
+    context.subscriptions.push(
+        createModuleCommand,
+        createTableCommand,
+        createReducerCommand,
+        createClientConnectionCommand,
+        generateBindingsCommand
+    );
+
+    // Register completion provider for enhanced IntelliSense
+    const completionProvider = vscode.languages.registerCompletionItemProvider('csharp', {
+        provideCompletionItems(document, position) {
+            return getSpacetimeDBCompletions(document, position);
+        }
+    }, '.', '[', '(');
+
+    context.subscriptions.push(completionProvider);
+
+    // Register hover provider for documentation
+    const hoverProvider = vscode.languages.registerHoverProvider('csharp', {
+        provideHover(document, position) {
+            return getSpacetimeDBHover(document, position);
+        }
+    });
+
+    context.subscriptions.push(hoverProvider);
+
+    // Watch for file changes to auto-generate bindings
+    if (vscode.workspace.getConfiguration('spacetimedb').get('autoGenerateBindings')) {
+        const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.cs');
+        fileWatcher.onDidChange((uri) => {
+            if (isSpacetimeDBModule(uri.fsPath)) {
+                autoGenerateBindings();
+            }
+        });
+        context.subscriptions.push(fileWatcher);
+    }
+}
+
+async function createModuleClass() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showErrorMessage('No active editor found');
+        return;
+    }
+
+    const moduleTemplate = `using SpacetimeDB;
+
+public static partial class Module
+{
+    [SpacetimeDB.Reducer(ReducerKind.Init)]
+    public static void Init(ReducerContext ctx)
+    {
+        Log.Info("Module initialized");
+    }
+
+    [SpacetimeDB.Reducer(ReducerKind.ClientConnected)]
+    public static void ClientConnected(ReducerContext ctx)
+    {
+        Log.Info($"Client connected: {ctx.Sender}");
+    }
+
+    [SpacetimeDB.Reducer(ReducerKind.ClientDisconnected)]
+    public static void ClientDisconnected(ReducerContext ctx)
+    {
+        Log.Info($"Client disconnected: {ctx.Sender}");
+    }
+}`;
+
+    await editor.edit(editBuilder => {
+        editBuilder.insert(editor.selection.start, moduleTemplate);
+    });
+}
+
+async function createTable() {
+    const tableName = await vscode.window.showInputBox({
+        prompt: 'Enter table name (e.g., Player)',
+        validateInput: (value) => {
+            if (!value) {
+                return 'Table name is required';
+            }
+            if (!/^[A-Z][a-zA-Z0-9]*$/.test(value)) {
+                return 'Table name must be PascalCase and start with a capital letter';
+            }
+            return null;
+        }
+    });
+
+    if (!tableName) return;
+
+    const isPublic = await vscode.window.showQuickPick(['Yes', 'No'], {
+        placeHolder: 'Should this table be public (readable by clients)?'
+    });
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showErrorMessage('No active editor found');
+        return;
+    }
+
+    const publicAttribute = isPublic === 'Yes' ? ', Public = true' : '';
+    const tableTemplate = `[SpacetimeDB.Table(Name = "${tableName.toLowerCase()}"${publicAttribute})]
+public partial struct ${tableName}
+{
+    [SpacetimeDB.PrimaryKey]
+    [SpacetimeDB.AutoInc]
+    public uint Id;
+    
+    // Add your fields here
+}`;
+
+    await editor.edit(editBuilder => {
+        editBuilder.insert(editor.selection.start, tableTemplate);
+    });
+}
+
+async function createReducer() {
+    const reducerName = await vscode.window.showInputBox({
+        prompt: 'Enter reducer name (e.g., CreatePlayer)',
+        validateInput: (value) => {
+            if (!value) {
+                return 'Reducer name is required';
+            }
+            if (!/^[A-Z][a-zA-Z0-9]*$/.test(value)) {
+                return 'Reducer name must be PascalCase and start with a capital letter';
+            }
+            return null;
+        }
+    });
+
+    if (!reducerName) return;
+
+    const reducerType = await vscode.window.showQuickPick([
+        'Regular Reducer',
+        'Init Reducer',
+        'ClientConnected Reducer',
+        'ClientDisconnected Reducer',
+        'Scheduled Reducer'
+    ], {
+        placeHolder: 'Select reducer type'
+    });
+
+    if (!reducerType) return;
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showErrorMessage('No active editor found');
+        return;
+    }
+
+    let template = '';
+    switch (reducerType) {
+        case 'Init Reducer':
+            template = `[SpacetimeDB.Reducer(ReducerKind.Init)]
+public static void ${reducerName}(ReducerContext ctx)
+{
+    // Initialize your module here
+}`;
+            break;
+        case 'ClientConnected Reducer':
+            template = `[SpacetimeDB.Reducer(ReducerKind.ClientConnected)]
+public static void ${reducerName}(ReducerContext ctx)
+{
+    // Handle client connection
+    // Client identity: ctx.Sender
+}`;
+            break;
+        case 'ClientDisconnected Reducer':
+            template = `[SpacetimeDB.Reducer(ReducerKind.ClientDisconnected)]
+public static void ${reducerName}(ReducerContext ctx)
+{
+    // Handle client disconnection
+    // Client identity: ctx.Sender
+}`;
+            break;
+        case 'Scheduled Reducer':
+            template = `[SpacetimeDB.Reducer]
+public static void ${reducerName}(ReducerContext ctx, YourScheduleType schedule)
+{
+    // Restrict to scheduler only (optional)
+    if (ctx.Sender != ctx.Identity)
+    {
+        throw new Exception("This reducer may only be invoked via scheduling.");
+    }
+    
+    // Your scheduled logic here
+}`;
+            break;
+        default:
+            template = `[SpacetimeDB.Reducer]
+public static void ${reducerName}(ReducerContext ctx)
+{
+    // Your reducer logic here
+}`;
+    }
+
+    await editor.edit(editBuilder => {
+        editBuilder.insert(editor.selection.start, template);
+    });
+}
+
+async function createClientConnection() {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showErrorMessage('No active editor found');
+        return;
+    }
+
+    const uri = await vscode.window.showInputBox({
+        prompt: 'Enter SpacetimeDB URI',
+        value: 'ws://localhost:3000'
+    });
+
+    const moduleName = await vscode.window.showInputBox({
+        prompt: 'Enter database/module name'
+    });
+
+    if (!uri || !moduleName) return;
+
+    const connectionTemplate = `var connection = DbConnection.Builder()
+    .WithUri(new Uri("${uri}"))
+    .WithModuleName("${moduleName}")
+    .OnConnect((conn, identity, token) =>
+    {
+        Console.WriteLine($"Connected with identity: {identity}");
+        // Setup subscriptions and callbacks here
+    })
+    .OnConnectError((ctx, error) =>
+    {
+        Console.WriteLine($"Connection error: {error}");
+    })
+    .OnDisconnect((ctx, error) =>
+    {
+        Console.WriteLine($"Disconnected: {error}");
+    })
+    .Build();
+
+// Subscribe to all tables
+connection.SubscriptionBuilder()
+    .OnApplied((ctx) =>
+    {
+        Console.WriteLine("Subscription applied");
+        // Setup row callbacks here
+    })
+    .SubscribeToAllTables();`;
+
+    await editor.edit(editBuilder => {
+        editBuilder.insert(editor.selection.start, connectionTemplate);
+    });
+}
+
+async function generateBindings() {
+    const config = vscode.workspace.getConfiguration('spacetimedb');
+    const spacetimeCliPath = config.get<string>('spacetimeCliPath', 'spacetime');
+    const defaultModulePath = config.get<string>('defaultModulePath', './server');
+    
+    const modulePath = await vscode.window.showInputBox({
+        prompt: 'Enter path to SpacetimeDB module',
+        value: defaultModulePath
+    });
+
+    const outputPath = await vscode.window.showInputBox({
+        prompt: 'Enter output directory for bindings',
+        value: './module_bindings'
+    });
+
+    if (!modulePath || !outputPath) return;
+
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (!workspaceFolder) {
+        vscode.window.showErrorMessage('No workspace folder found');
+        return;
+    }
+
+    const fullModulePath = path.resolve(workspaceFolder.uri.fsPath, modulePath);
+    const fullOutputPath = path.resolve(workspaceFolder.uri.fsPath, outputPath);
+
+    // Create output directory if it doesn't exist
+    if (!fs.existsSync(fullOutputPath)) {
+        fs.mkdirSync(fullOutputPath, { recursive: true });
+    }
+
+    const command = `${spacetimeCliPath} generate --lang cs --out-dir "${fullOutputPath}" --project-path "${fullModulePath}"`;
+
+    vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Generating SpacetimeDB bindings...',
+        cancellable: false
+    }, async () => {
+        return new Promise<void>((resolve, reject) => {
+            exec(command, { cwd: workspaceFolder.uri.fsPath }, (error, stdout, stderr) => {
+                if (error) {
+                    vscode.window.showErrorMessage(`Failed to generate bindings: ${error.message}`);
+                    reject(error);
+                } else {
+                    vscode.window.showInformationMessage('SpacetimeDB bindings generated successfully!');
+                    console.log('stdout:', stdout);
+                    if (stderr) console.log('stderr:', stderr);
+                    resolve();
+                }
+            });
+        });
+    });
+}
+
+function getSpacetimeDBCompletions(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
+    const line = document.lineAt(position);
+    const lineText = line.text;
+
+    const completions: vscode.CompletionItem[] = [];
+
+    // Suggest SpacetimeDB attributes
+    if (lineText.includes('[')) {
+        const attributes = [
+            {
+                label: 'SpacetimeDB.Table',
+                insertText: new vscode.SnippetString('SpacetimeDB.Table(Name = "${1:table_name}", Public = ${2|true,false|})'),
+                documentation: 'Marks a struct as a SpacetimeDB table'
+            },
+            {
+                label: 'SpacetimeDB.Reducer',
+                insertText: new vscode.SnippetString('SpacetimeDB.Reducer'),
+                documentation: 'Marks a function as a SpacetimeDB reducer'
+            },
+            {
+                label: 'SpacetimeDB.PrimaryKey',
+                insertText: new vscode.SnippetString('SpacetimeDB.PrimaryKey'),
+                documentation: 'Marks a field as the primary key'
+            },
+            {
+                label: 'SpacetimeDB.Unique',
+                insertText: new vscode.SnippetString('SpacetimeDB.Unique'),
+                documentation: 'Marks a field as unique'
+            },
+            {
+                label: 'SpacetimeDB.AutoInc',
+                insertText: new vscode.SnippetString('SpacetimeDB.AutoInc'),
+                documentation: 'Marks a field as auto-incrementing'
+            },
+            {
+                label: 'SpacetimeDB.Index.BTree',
+                insertText: new vscode.SnippetString('SpacetimeDB.Index.BTree${1:(Name = "${2:IndexName}")}'),
+                documentation: 'Creates a B-Tree index on the field'
+            },
+            {
+                label: 'SpacetimeDB.Type',
+                insertText: new vscode.SnippetString('SpacetimeDB.Type'),
+                documentation: 'Marks a type as usable in SpacetimeDB'
+            }
+        ];
+
+        attributes.forEach(attr => {
+            const item = new vscode.CompletionItem(attr.label, vscode.CompletionItemKind.Class);
+            item.insertText = attr.insertText;
+            item.documentation = new vscode.MarkdownString(attr.documentation);
+            completions.push(item);
+        });
+    }
+
+    // Suggest ctx.Db completions
+    if (lineText.includes('ctx.Db.')) {
+        const dbMethods = [
+            {
+                label: 'Insert',
+                insertText: new vscode.SnippetString('Insert(new ${1:TableType} { ${2:Field} = ${3:value} })'),
+                documentation: 'Insert a new row into the table'
+            },
+            {
+                label: 'Find',
+                insertText: new vscode.SnippetString('Find(${1:key})'),
+                documentation: 'Find a row by unique field value'
+            },
+            {
+                label: 'Update',
+                insertText: new vscode.SnippetString('Update(${1:row})'),
+                documentation: 'Update an existing row'
+            },
+            {
+                label: 'Delete',
+                insertText: new vscode.SnippetString('Delete(${1:key})'),
+                documentation: 'Delete a row by unique field value'
+            },
+            {
+                label: 'Iter',
+                insertText: new vscode.SnippetString('Iter()'),
+                documentation: 'Iterate over all rows in the table'
+            },
+            {
+                label: 'Filter',
+                insertText: new vscode.SnippetString('Filter(${1:value})'),
+                documentation: 'Filter rows by index value'
+            }
+        ];
+
+        dbMethods.forEach(method => {
+            const item = new vscode.CompletionItem(method.label, vscode.CompletionItemKind.Method);
+            item.insertText = method.insertText;
+            item.documentation = new vscode.MarkdownString(method.documentation);
+            completions.push(item);
+        });
+    }
+
+    // Suggest Log methods
+    if (lineText.includes('Log.')) {
+        const logMethods = ['Info', 'Error', 'Debug', 'Warn', 'Trace'].map(level => {
+            const item = new vscode.CompletionItem(`${level}`, vscode.CompletionItemKind.Method);
+            item.insertText = new vscode.SnippetString(`${level}($\{1:"${level.toLowerCase()} message"})`);
+            item.documentation = new vscode.MarkdownString(`Log a ${level.toLowerCase()} message`);
+            return item;
+        });
+        
+        completions.push(...logMethods);
+    }
+
+    return completions;
+}
+
+function getSpacetimeDBHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    const range = document.getWordRangeAtPosition(position);
+    if (!range) return undefined;
+
+    const word = document.getText(range);
+    
+    const hoverInfo: { [key: string]: string } = {
+        'ReducerContext': 'Context object provided to all reducers, containing database access and caller information',
+        'SpacetimeDB': 'Core namespace for SpacetimeDB attributes and types',
+        'Identity': 'Unique identifier for a user across all connections',
+        'ConnectionId': 'Unique identifier for a specific client connection',
+        'Timestamp': 'Point in time measured in microseconds since Unix epoch',
+        'TimeDuration': 'Duration between two timestamps',
+        'ScheduleAt': 'Specifies when a scheduled reducer should execute',
+        'TaggedEnum': 'Union type that can hold one of several different types',
+        'Log': 'Utility class for logging messages from reducers'
+    };
+
+    if (hoverInfo[word]) {
+        return new vscode.Hover(new vscode.MarkdownString(hoverInfo[word]));
+    }
+
+    return undefined;
+}
+
+function isSpacetimeDBModule(filePath: string): boolean {
+    // Simple heuristic: check if file contains SpacetimeDB imports or attributes
+    try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        return content.includes('SpacetimeDB') && 
+               (content.includes('[SpacetimeDB.Table]') || 
+                content.includes('[SpacetimeDB.Reducer]'));
+    } catch {
+        return false;
+    }
+}
+
+function autoGenerateBindings() {
+    const config = vscode.workspace.getConfiguration('spacetimedb');
+    if (!config.get('autoGenerateBindings')) return;
+
+    // Debounce auto-generation to avoid excessive calls
+    setTimeout(() => {
+        generateBindings();
+    }, 2000);
+}
+
+export function deactivate() {
+    console.log('SpacetimeDB extension deactivated');
+}

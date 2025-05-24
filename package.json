@@ -1,0 +1,140 @@
+{
+  "name": "spacetimedb-csharp",
+  "displayName": "SpacetimeDB C# Support",
+  "description": "IntelliSense, snippets, and tooling for SpacetimeDB C# modules and clients",
+  "version": "1.0.0",
+  "publisher": "spacetimedb",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Other"
+  ],
+  "keywords": [
+    "spacetimedb",
+    "database",
+    "game development",
+    "multiplayer",
+    "csharp",
+    "unity"
+  ],
+  "activationEvents": [
+    "onLanguage:csharp"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "csharp",
+        "extensions": [".cs"]
+      }
+    ],
+    "snippets": [
+      {
+        "language": "csharp",
+        "path": "./snippets/spacetimedb-server.json"
+      },
+      {
+        "language": "csharp",
+        "path": "./snippets/spacetimedb-client.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "spacetimedb.createModule",
+        "title": "Create SpacetimeDB Module Class"
+      },
+      {
+        "command": "spacetimedb.createTable",
+        "title": "Create SpacetimeDB Table"
+      },
+      {
+        "command": "spacetimedb.createReducer",
+        "title": "Create SpacetimeDB Reducer"
+      },
+      {
+        "command": "spacetimedb.createClientConnection",
+        "title": "Create SpacetimeDB Client Connection"
+      },
+      {
+        "command": "spacetimedb.generateBindings",
+        "title": "Generate SpacetimeDB Client Bindings"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .cs",
+          "command": "spacetimedb.createTable",
+          "group": "spacetimedb"
+        },
+        {
+          "when": "resourceExtname == .cs",
+          "command": "spacetimedb.createReducer",
+          "group": "spacetimedb"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "spacetimedb.createModule"
+        },
+        {
+          "command": "spacetimedb.createTable"
+        },
+        {
+          "command": "spacetimedb.createReducer"
+        },
+        {
+          "command": "spacetimedb.createClientConnection"
+        },
+        {
+          "command": "spacetimedb.generateBindings"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SpacetimeDB",
+      "properties": {
+        "spacetimedb.spacetimeCliPath": {
+          "type": "string",
+          "default": "spacetime",
+          "description": "Path to the spacetime CLI tool"
+        },
+        "spacetimedb.autoGenerateBindings": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically generate client bindings when module changes"
+        },
+        "spacetimedb.defaultModulePath": {
+          "type": "string",
+          "default": "./server",
+          "description": "Default path for SpacetimeDB modules"
+        },
+        "spacetimedb.defaultClientPath": {
+          "type": "string",
+          "default": "./client",
+          "description": "Default path for SpacetimeDB client code"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts --ignore-pattern src/test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "child_process": "^1.0.2"
+  }
+}

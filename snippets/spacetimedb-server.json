@@ -1,0 +1,338 @@
+{
+  "SpacetimeDB Module Class": {
+    "prefix": ["stdb-module", "spacetime-module"],
+    "description": "Create a basic SpacetimeDB module class",
+    "body": [
+      "using SpacetimeDB;",
+      "",
+      "public static partial class Module",
+      "{",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Table": {
+    "prefix": ["stdb-table", "spacetime-table"],
+    "description": "Create a SpacetimeDB table struct",
+    "body": [
+      "[SpacetimeDB.Table(Name = \"${1:table_name}\", Public = ${2:true})]",
+      "public partial struct ${3:TableName}",
+      "{",
+      "\t[SpacetimeDB.PrimaryKey]",
+      "\t[SpacetimeDB.AutoInc]",
+      "\tpublic ${4:uint} ${5:Id};",
+      "\t",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Reducer": {
+    "prefix": ["stdb-reducer", "spacetime-reducer"],
+    "description": "Create a SpacetimeDB reducer function",
+    "body": [
+      "[SpacetimeDB.Reducer]",
+      "public static void ${1:ReducerName}(ReducerContext ctx${2:, ${3:string} ${4:param}})",
+      "{",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Init Reducer": {
+    "prefix": ["stdb-init", "spacetime-init"],
+    "description": "Create a SpacetimeDB init lifecycle reducer",
+    "body": [
+      "[SpacetimeDB.Reducer(ReducerKind.Init)]",
+      "public static void Init(ReducerContext ctx)",
+      "{",
+      "\t// Run when the module is first loaded",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB ClientConnected Reducer": {
+    "prefix": ["stdb-client-connected", "spacetime-client-connected"],
+    "description": "Create a ClientConnected lifecycle reducer",
+    "body": [
+      "[SpacetimeDB.Reducer(ReducerKind.ClientConnected)]",
+      "public static void ClientConnected(ReducerContext ctx)",
+      "{",
+      "\t// Called when a client connects",
+      "\t// Client identity: ctx.Sender",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB ClientDisconnected Reducer": {
+    "prefix": ["stdb-client-disconnected", "spacetime-client-disconnected"],
+    "description": "Create a ClientDisconnected lifecycle reducer",
+    "body": [
+      "[SpacetimeDB.Reducer(ReducerKind.ClientDisconnected)]",
+      "public static void ClientDisconnected(ReducerContext ctx)",
+      "{",
+      "\t// Called when a client disconnects",
+      "\t// Client identity: ctx.Sender",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Scheduled Table": {
+    "prefix": ["stdb-scheduled-table", "spacetime-scheduled"],
+    "description": "Create a scheduled reducer table",
+    "body": [
+      "[SpacetimeDB.Table(Name = \"${1:schedule_name}\", Scheduled = nameof(${2:ScheduledReducer}), ScheduledAt = nameof(ScheduledAt))]",
+      "public partial struct ${3:ScheduleName}",
+      "{",
+      "\t[SpacetimeDB.PrimaryKey]",
+      "\t[SpacetimeDB.AutoInc]",
+      "\tpublic ulong Id;",
+      "\t",
+      "\tpublic ScheduleAt ScheduledAt;",
+      "\t",
+      "\t// Custom fields:",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Scheduled Reducer": {
+    "prefix": ["stdb-scheduled-reducer"],
+    "description": "Create a scheduled reducer function",
+    "body": [
+      "[SpacetimeDB.Reducer]",
+      "public static void ${1:ScheduledReducer}(ReducerContext ctx, ${2:ScheduleTable} schedule)",
+      "{",
+      "\t// Restrict to scheduler only (optional)",
+      "\tif (ctx.Sender != ctx.Identity)",
+      "\t{",
+      "\t\tthrow new Exception(\"Reducer ${1:ScheduledReducer} may only be invoked via scheduling.\");",
+      "\t}",
+      "\t",
+      "\t$0",
+      "}"
+    ]
+  },
+  "SpacetimeDB Index BTree": {
+    "prefix": ["stdb-index", "spacetime-index"],
+    "description": "Add a BTree index to a field",
+    "body": [
+      "[SpacetimeDB.Index.BTree${1:(Name = \"${2:IndexName}\")}]",
+      "public ${3:string} ${4:FieldName};$0"
+    ]
+  },
+  "SpacetimeDB Multi-Column Index": {
+    "prefix": ["stdb-multi-index"],
+    "description": "Add a multi-column BTree index to a table",
+    "body": [
+      "[SpacetimeDB.Index.BTree(Name = \"${1:IndexName}\", Columns = [nameof(${2:Column1}), nameof(${3:Column2})])]"
+    ]
+  },
+  "SpacetimeDB Unique Field": {
+    "prefix": ["stdb-unique"],
+    "description": "Add a unique constraint to a field",
+    "body": [
+      "[SpacetimeDB.Unique]",
+      "public ${1:string} ${2:FieldName};$0"
+    ]
+  },
+  "SpacetimeDB Primary Key": {
+    "prefix": ["stdb-primary-key", "stdb-pk"],
+    "description": "Add a primary key field",
+    "body": [
+      "[SpacetimeDB.PrimaryKey]",
+      "${1:[SpacetimeDB.AutoInc]}",
+      "public ${2:uint} ${3:Id};$0"
+    ]
+  },
+  "SpacetimeDB TaggedEnum": {
+    "prefix": ["stdb-tagged-enum", "spacetime-tagged-enum"],
+    "description": "Create a SpacetimeDB tagged enum",
+    "body": [
+      "[SpacetimeDB.Type]",
+      "public partial record ${1:EnumName} : SpacetimeDB.TaggedEnum<(${2:string Text, uint Number})> { }$0"
+    ]
+  },
+  "SpacetimeDB Type": {
+    "prefix": ["stdb-type", "spacetime-type"],
+    "description": "Create a custom SpacetimeDB type",
+    "body": [
+      "[SpacetimeDB.Type]",
+      "public partial struct ${1:TypeName}",
+      "{",
+      "\tpublic ${2:string} ${3:FieldName};",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Table Insert": {
+    "prefix": ["stdb-insert"],
+    "description": "Insert a row into a table",
+    "body": [
+      "var ${1:result} = ctx.Db.${2:table_name}.Insert(new ${3:TableType}",
+      "{",
+      "\t${4:Field} = ${5:value},$0",
+      "});"
+    ]
+  },
+  "Table Update": {
+    "prefix": ["stdb-update"],
+    "description": "Update a row in a table using unique index",
+    "body": [
+      "var ${1:updated} = ctx.Db.${2:table_name}.${3:UniqueField}.Update(${4:row});$0"
+    ]
+  },
+  "Table Delete": {
+    "prefix": ["stdb-delete"],
+    "description": "Delete a row from a table",
+    "body": [
+      "ctx.Db.${1:table_name}.${2:UniqueField}.Delete(${3:key});$0"
+    ]
+  },
+  "Table Find": {
+    "prefix": ["stdb-find"],
+    "description": "Find a row by unique field",
+    "body": [
+      "var ${1:result} = ctx.Db.${2:table_name}.${3:UniqueField}.Find(${4:key});",
+      "if (${1:result} != null)",
+      "{",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Table Filter": {
+    "prefix": ["stdb-filter"],
+    "description": "Filter rows by index",
+    "body": [
+      "foreach (var ${1:row} in ctx.Db.${2:table_name}.${3:Index}.Filter(${4:value}))",
+      "{",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Table Iterate": {
+    "prefix": ["stdb-iter"],
+    "description": "Iterate over all rows in a table",
+    "body": [
+      "foreach (var ${1:row} in ctx.Db.${2:table_name}.Iter())",
+      "{",
+      "\t$0",
+      "}"
+    ]
+  },
+  "Schedule Once": {
+    "prefix": ["stdb-schedule-once"],
+    "description": "Schedule a reducer to run once",
+    "body": [
+      "var ${1:futureTime} = ctx.Timestamp + new TimeDuration { Microseconds = ${2:10_000_000} }; // ${3:10} seconds",
+      "ctx.Db.${4:schedule_table}.Insert(new ${5:ScheduleType}",
+      "{",
+      "\tId = 0, // AutoInc",
+      "\tScheduledAt = new ScheduleAt.Time(${1:futureTime}),",
+      "\t$0",
+      "});"
+    ]
+  },
+  "Schedule Repeating": {
+    "prefix": ["stdb-schedule-repeat"],
+    "description": "Schedule a reducer to run repeatedly",
+    "body": [
+      "var ${1:interval} = new TimeDuration { Microseconds = ${2:10_000_000} }; // ${3:10} seconds",
+      "ctx.Db.${4:schedule_table}.Insert(new ${5:ScheduleType}",
+      "{",
+      "\tId = 0, // AutoInc", 
+      "\tScheduledAt = new ScheduleAt.Interval(${1:interval}),",
+      "\t$0",
+      "});"
+    ]
+  },
+  "Log Info": {
+    "prefix": ["stdb-log-info"],
+    "description": "Log an info message",
+    "body": [
+      "Log.Info($\"${1:message}\");$0"
+    ]
+  },
+  "Log Error": {
+    "prefix": ["stdb-log-error"],
+    "description": "Log an error message",
+    "body": [
+      "Log.Error($\"${1:error message}\");$0"
+    ]
+  },
+  "Complete Game Module Template": {
+    "prefix": ["stdb-game-template"],
+    "description": "Create a complete game module template",
+    "body": [
+      "using SpacetimeDB;",
+      "",
+      "public static partial class Module",
+      "{",
+      "\t// Player table",
+      "\t[SpacetimeDB.Table(Name = \"player\", Public = true)]",
+      "\tpublic partial struct Player",
+      "\t{",
+      "\t\t[SpacetimeDB.PrimaryKey]",
+      "\t\tpublic Identity UserId;",
+      "\t\t",
+      "\t\t[SpacetimeDB.Unique]",
+      "\t\tpublic string Name;",
+      "\t\t",
+      "\t\tpublic float X;",
+      "\t\tpublic float Y;",
+      "\t}",
+      "\t",
+      "\t// Initialize the game",
+      "\t[SpacetimeDB.Reducer(ReducerKind.Init)]",
+      "\tpublic static void Init(ReducerContext ctx)",
+      "\t{",
+      "\t\tLog.Info(\"Game module initialized\");",
+      "\t}",
+      "\t",
+      "\t// Handle player connection",
+      "\t[SpacetimeDB.Reducer(ReducerKind.ClientConnected)]",
+      "\tpublic static void ClientConnected(ReducerContext ctx)",
+      "\t{",
+      "\t\tLog.Info($\"Player connected: {ctx.Sender}\");",
+      "\t}",
+      "\t",
+      "\t// Create or update player",
+      "\t[SpacetimeDB.Reducer]",
+      "\tpublic static void SetPlayerName(ReducerContext ctx, string name)",
+      "\t{",
+      "\t\tvar existingPlayer = ctx.Db.player.UserId.Find(ctx.Sender);",
+      "\t\tif (existingPlayer != null)",
+      "\t\t{",
+      "\t\t\t// Update existing player",
+      "\t\t\tvar updated = existingPlayer.Value;",
+      "\t\t\tupdated.Name = name;",
+      "\t\t\tctx.Db.player.UserId.Update(updated);",
+      "\t\t}",
+      "\t\telse",
+      "\t\t{",
+      "\t\t\t// Create new player",
+      "\t\t\tctx.Db.player.Insert(new Player",
+      "\t\t\t{",
+      "\t\t\t\tUserId = ctx.Sender,",
+      "\t\t\t\tName = name,",
+      "\t\t\t\tX = 0,",
+      "\t\t\t\tY = 0",
+      "\t\t\t});",
+      "\t\t}",
+      "\t}",
+      "\t",
+      "\t// Move player",
+      "\t[SpacetimeDB.Reducer]",
+      "\tpublic static void MovePlayer(ReducerContext ctx, float x, float y)",
+      "\t{",
+      "\t\tvar player = ctx.Db.player.UserId.Find(ctx.Sender);",
+      "\t\tif (player != null)",
+      "\t\t{",
+      "\t\t\tvar updated = player.Value;",
+      "\t\t\tupdated.X = x;",
+      "\t\t\tupdated.Y = y;",
+      "\t\t\tctx.Db.player.UserId.Update(updated);",
+      "\t\t}",
+      "\t}",
+      "\t$0",
+      "}"
+    ]
+  }
+}

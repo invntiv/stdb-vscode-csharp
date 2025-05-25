@@ -60,26 +60,53 @@ async function createModuleClass() {
 
     const moduleTemplate = `using SpacetimeDB;
 
-public static partial class Module
-{
-    [SpacetimeDB.Reducer(ReducerKind.Init)]
-    public static void Init(ReducerContext ctx)
+    public static partial class Module
     {
-        Log.Info("Module initialized");
-    }
+        [SpacetimeDB.Table]
+        public partial struct Person
+        {
+            [SpacetimeDB.AutoInc]
+            [SpacetimeDB.PrimaryKey]
+            public int Id;
+            public string Name;
+            public int Age;
+        }
 
-    [SpacetimeDB.Reducer(ReducerKind.ClientConnected)]
-    public static void ClientConnected(ReducerContext ctx)
-    {
-        Log.Info($"Client connected: {ctx.Sender}");
-    }
+        [SpacetimeDB.Reducer]
+        public static void AddPerson(ReducerContext ctx, string name, int age)
+        {
+            var person = ctx.Db.Person.Insert(new Person { Name = name, Age = age });
+            Log.Info($"Inserted {person.Name} under #{person.Id}");
+        }
 
-    [SpacetimeDB.Reducer(ReducerKind.ClientDisconnected)]
-    public static void ClientDisconnected(ReducerContext ctx)
-    {
-        Log.Info($"Client disconnected: {ctx.Sender}");
-    }
-}`;
+        [SpacetimeDB.Reducer]
+        public static void SayHello(ReducerContext ctx)
+        {
+            foreach (var person in ctx.Db.Person.Iter())
+            {
+                Log.Info($"Hello, {person.Name}!");
+            }
+            Log.Info("Hello, World!");
+        }
+
+        [Reducer(ReducerKind.Init)]
+        public static void Init(ReducerContext ctx)
+        {
+            // Run when the module is first loaded.
+        }
+
+        [Reducer(ReducerKind.ClientConnected)]
+        public static void ClientConnected(ReducerContext ctx)
+        {
+            // Called when a client connects.
+        }
+
+        [Reducer(ReducerKind.ClientDisconnected)]
+        public static void ClientDisconnected(ReducerContext ctx)
+        {
+            // Called when a client connects.
+        }
+    }`;
 
     await editor.edit(editBuilder => {
         editBuilder.insert(editor.selection.start, moduleTemplate);

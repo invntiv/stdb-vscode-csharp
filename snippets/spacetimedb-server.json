@@ -147,7 +147,10 @@
     "description": "Create a SpacetimeDB tagged enum",
     "body": [
       "[SpacetimeDB.Type]",
-      "public partial record ${1:EnumName} : SpacetimeDB.TaggedEnum<(${2:string Text, uint Number})> { }$0"
+      "public partial record ${1:EnumName} : SpacetimeDB.TaggedEnum<(${2:string Text, uint Number})> { }$0",
+      "${1:EnumName} a = new ${1:EnumName}.Text(\"apple\");",
+      "${1:EnumName} b = new ${1:EnumName}.Number(57);",
+      "${1:EnumName} c = new ${1:EnumName}.Number(59);"
     ]
   },
   "SpacetimeDB Type": {

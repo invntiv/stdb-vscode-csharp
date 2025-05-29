@@ -2,7 +2,7 @@
   "name": "spacetimedb-csharp",
   "displayName": "SpacetimeDB C# Support",
   "description": "IntelliSense, snippets, and tooling for SpacetimeDB C# modules and clients",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "invntiv",
   "author": {
     "name": "invntiv"
@@ -120,22 +120,35 @@
         "spacetimedb.spacetimeCliPath": {
           "type": "string",
           "default": "spacetime",
-          "description": "Path to the spacetime CLI tool"
+          "markdownDescription": "Path to the SpacetimeDB CLI tool. Use `spacetime` for PATH, or specify full path like `/usr/local/bin/spacetime` (macOS/Linux) or `C:\\spacetime\\spacetime.exe` (Windows)"
         },
         "spacetimedb.autoGenerateBindings": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically generate client bindings when module changes"
+          "description": "Automatically generate client bindings when module files change"
         },
         "spacetimedb.defaultModulePath": {
           "type": "string",
           "default": "./server",
-          "description": "Default path for SpacetimeDB modules"
+          "markdownDescription": "Default path for SpacetimeDB modules (relative to workspace root)"
         },
         "spacetimedb.defaultClientPath": {
           "type": "string",
-          "default": "./client",
-          "description": "Default path for SpacetimeDB client code"
+          "default": "./module_bindings",
+          "markdownDescription": "Default path for SpacetimeDB client bindings. For Unity projects, use `./Assets/Scripts/SpacetimeDB/module_bindings`"
+        },
+        "spacetimedb.unityIntegration": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Unity-specific features and defaults"
+        },
+        "spacetimedb.lastUsedModulePath": {
+          "type": "string",
+          "description": "Last used module path (automatically saved)"
+        },
+        "spacetimedb.lastUsedOutputPath": {
+          "type": "string", 
+          "description": "Last used output path (automatically saved)"
         }
       }
     }

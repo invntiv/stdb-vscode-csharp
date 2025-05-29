@@ -87,16 +87,280 @@ function isUnityProject(workspacePath: string): boolean {
            fs.existsSync(path.join(workspacePath, 'ProjectSettings'));
 }
 
-// Get platform-appropriate default paths
-function getDefaultPaths(workspaceRoot: string) {
+// Check if a folder contains SpacetimeDB module files
+function containsSpacetimeDBModule(folderPath: string): boolean {
+    try {
+        const files = fs.readdirSync(folderPath);
+        
+        // Look for .csproj files and .cs files with SpacetimeDB attributes
+        for (const file of files) {
+            if (file.endsWith('.csproj')) {
+                const csprojPath = path.join(folderPath, file);
+                const content = fs.readFileSync(csprojPath, 'utf8');
+                if (content.includes('SpacetimeDB.Runtime')) {
+                    return true;
+                }
+            }
+            
+            if (file.endsWith('.cs')) {
+                const csPath = path.join(folderPath, file);
+                const content = fs.readFileSync(csPath, 'utf8');
+                if (content.includes('SpacetimeDB') && 
+                    (content.includes('[SpacetimeDB.Table]') || 
+                     content.includes('[SpacetimeDB.Reducer]'))) {
+                    return true;
+                }
+            }
+        }
+    } catch {
+        // Ignore errors (permission issues, etc.)
+    }
+    return false;
+}
+
+// Find potential SpacetimeDB module folders in workspace
+function findSpacetimeDBModuleFolders(workspaceRoot: string): string[] {
+    const candidates: string[] = [];
+    
+    try {
+        const entries = fs.readdirSync(workspaceRoot, { withFileTypes: true });
+        
+        for (const entry of entries) {
+            if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                const folderPath = path.join(workspaceRoot, entry.name);
+                if (containsSpacetimeDBModule(folderPath)) {
+                    candidates.push(`./${entry.name}`);
+                }
+            }
+        }
+    } catch {
+        // Ignore errors
+    }
+    
+    return candidates;
+}
+
+// Find potential client binding output folders
+function findPotentialClientFolders(workspaceRoot: string): string[] {
+    const candidates: string[] = [];
     const isUnity = isUnityProject(workspaceRoot);
     
+    if (isUnity) {
+        // Unity-specific suggestions
+        candidates.push(
+            './Assets/Scripts/SpacetimeDB/module_bindings',
+            './Assets/Scripts/Generated',
+            './Assets/SpacetimeDB',
+            './Assets/Scripts/Network'
+        );
+    } else {
+        // General project suggestions
+        candidates.push(
+            './module_bindings',
+            './client/bindings',
+            './src/generated',
+            './generated'
+        );
+    }
+    
+    return candidates;
+}
+
+// Get user preferences for paths
+function getUserPreferences(): { modulePath?: string; outputPath?: string } {
+    const config = vscode.workspace.getConfiguration('spacetimedb');
     return {
-        modulePath: './server',
-        outputPath: isUnity 
-            ? path.join('Assets', 'Scripts', 'SpacetimeDB', 'module_bindings')
-            : 'module_bindings'
+        modulePath: config.get<string>('lastUsedModulePath'),
+        outputPath: config.get<string>('lastUsedOutputPath')
     };
+}
+
+// Save user preferences
+function saveUserPreferences(modulePath: string, outputPath: string) {
+    const config = vscode.workspace.getConfiguration('spacetimedb');
+    config.update('lastUsedModulePath', modulePath, vscode.ConfigurationTarget.Workspace);
+    config.update('lastUsedOutputPath', outputPath, vscode.ConfigurationTarget.Workspace);
+}
+
+// Get platform-appropriate default paths with user preferences
+function getDefaultPaths(workspaceRoot: string) {
+    const isUnity = isUnityProject(workspaceRoot);
+    const preferences = getUserPreferences();
+    
+    return {
+        modulePath: preferences.modulePath || './server',
+        outputPath: preferences.outputPath || (isUnity 
+            ? path.join('Assets', 'Scripts', 'SpacetimeDB', 'module_bindings')
+            : 'module_bindings')
+    };
+}
+
+// Enhanced path selection with multiple options
+async function selectModulePath(workspaceRoot: string, defaultPath: string): Promise<string | undefined> {
+    const detectedFolders = findSpacetimeDBModuleFolders(workspaceRoot);
+    const preferences = getUserPreferences();
+    
+    // Build options list
+    const options: vscode.QuickPickItem[] = [];
+    
+    // Add detected folders
+    detectedFolders.forEach(folder => {
+        options.push({
+            label: folder,
+            description: '🎯 Detected SpacetimeDB module',
+            detail: 'Contains SpacetimeDB files'
+        });
+    });
+    
+    // Add user's last used path if different
+    if (preferences.modulePath && !detectedFolders.includes(preferences.modulePath)) {
+        options.push({
+            label: preferences.modulePath,
+            description: '🕐 Recently used',
+            detail: 'Your last used module path'
+        });
+    }
+    
+    // Add default if different
+    if (defaultPath && !detectedFolders.includes(defaultPath) && defaultPath !== preferences.modulePath) {
+        options.push({
+            label: defaultPath,
+            description: '📁 Default suggestion',
+            detail: 'Recommended folder structure'
+        });
+    }
+    
+    // Add browse option
+    options.push({
+        label: '📂 Browse for folder...',
+        description: 'Select custom folder',
+        detail: 'Choose any folder containing your SpacetimeDB module'
+    });
+    
+    // Add manual entry option
+    options.push({
+        label: '✏️ Enter path manually...',
+        description: 'Type custom path',
+        detail: 'Enter relative or absolute path'
+    });
+    
+    const selected = await vscode.window.showQuickPick(options, {
+        placeHolder: 'Select SpacetimeDB module folder',
+        matchOnDescription: true,
+        matchOnDetail: true
+    });
+    
+    if (!selected) return undefined;
+    
+    if (selected.label === '📂 Browse for folder...') {
+        const result = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Select SpacetimeDB Module Folder',
+            defaultUri: vscode.Uri.file(workspaceRoot)
+        });
+        
+        if (result && result[0]) {
+            const relativePath = path.relative(workspaceRoot, result[0].fsPath);
+            return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
+        }
+        return undefined;
+    }
+    
+    if (selected.label === '✏️ Enter path manually...') {
+        return await vscode.window.showInputBox({
+            prompt: 'Enter path to SpacetimeDB module',
+            value: defaultPath,
+            validateInput: (value) => {
+                if (!value) return 'Path is required';
+                return null;
+            }
+        });
+    }
+    
+    return selected.label;
+}
+
+// Enhanced output path selection
+async function selectOutputPath(workspaceRoot: string, defaultPath: string): Promise<string | undefined> {
+    const potentialFolders = findPotentialClientFolders(workspaceRoot);
+    const preferences = getUserPreferences();
+    
+    // Build options list
+    const options: vscode.QuickPickItem[] = [];
+    
+    // Add user's last used path first
+    if (preferences.outputPath) {
+        options.push({
+            label: preferences.outputPath,
+            description: '🕐 Recently used',
+            detail: 'Your last used output path'
+        });
+    }
+    
+    // Add potential folders
+    potentialFolders.forEach(folder => {
+        if (folder !== preferences.outputPath) {
+            const isUnity = folder.includes('Assets');
+            options.push({
+                label: folder,
+                description: isUnity ? '🎮 Unity suggestion' : '📁 Suggested path',
+                detail: isUnity ? 'Unity Assets folder structure' : 'Common client bindings location'
+            });
+        }
+    });
+    
+    // Add browse option
+    options.push({
+        label: '📂 Browse for folder...',
+        description: 'Select custom folder',
+        detail: 'Choose where to generate client bindings'
+    });
+    
+    // Add manual entry option
+    options.push({
+        label: '✏️ Enter path manually...',
+        description: 'Type custom path',
+        detail: 'Enter relative or absolute path'
+    });
+    
+    const selected = await vscode.window.showQuickPick(options, {
+        placeHolder: 'Select output directory for client bindings',
+        matchOnDescription: true,
+        matchOnDetail: true
+    });
+    
+    if (!selected) return undefined;
+    
+    if (selected.label === '📂 Browse for folder...') {
+        const result = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Select Output Folder for Client Bindings',
+            defaultUri: vscode.Uri.file(workspaceRoot)
+        });
+        
+        if (result && result[0]) {
+            const relativePath = path.relative(workspaceRoot, result[0].fsPath);
+            return relativePath.startsWith('.') ? relativePath : `./${relativePath}`;
+        }
+        return undefined;
+    }
+    
+    if (selected.label === '✏️ Enter path manually...') {
+        return await vscode.window.showInputBox({
+            prompt: 'Enter output directory for bindings',
+            value: defaultPath,
+            validateInput: (value) => {
+                if (!value) return 'Path is required';
+                return null;
+            }
+        });
+    }
+    
+    return selected.label;
 }
 
 async function createModuleClass() {
@@ -321,20 +585,31 @@ async function generateBindings() {
     const workspaceRoot = workspaceFolder.uri.fsPath;
     const defaults = getDefaultPaths(workspaceRoot);
     
-    const modulePath = await vscode.window.showInputBox({
-        prompt: 'Enter path to SpacetimeDB module',
-        value: defaults.modulePath
-    });
+    // Enhanced path selection with smart suggestions
+    const modulePath = await selectModulePath(workspaceRoot, defaults.modulePath);
+    if (!modulePath) return; // User cancelled
+    
+    const outputPath = await selectOutputPath(workspaceRoot, defaults.outputPath);
+    if (!outputPath) return; // User cancelled
 
-    const outputPath = await vscode.window.showInputBox({
-        prompt: 'Enter output directory for bindings',
-        value: defaults.outputPath
-    });
-
-    if (!modulePath || !outputPath) return;
+    // Save user preferences for next time
+    saveUserPreferences(modulePath, outputPath);
 
     const fullModulePath = resolvePath(modulePath, workspaceRoot);
     const fullOutputPath = resolvePath(outputPath, workspaceRoot);
+
+    // Validate module path exists
+    if (!fs.existsSync(fullModulePath)) {
+        const create = await vscode.window.showWarningMessage(
+            `Module path "${modulePath}" doesn't exist. Create it?`,
+            'Yes', 'No'
+        );
+        if (create === 'Yes') {
+            fs.mkdirSync(fullModulePath, { recursive: true });
+        } else {
+            return;
+        }
+    }
 
     // Create output directory if it doesn't exist
     if (!fs.existsSync(fullOutputPath)) {
@@ -375,7 +650,9 @@ async function generateBindings() {
 
             process.on('close', (code) => {
                 if (code === 0) {
-                    vscode.window.showInformationMessage('SpacetimeDB bindings generated successfully!');
+                    vscode.window.showInformationMessage(
+                        `SpacetimeDB bindings generated successfully!\nModule: ${modulePath}\nOutput: ${outputPath}`
+                    );
                     console.log('stdout:', stdout);
                     resolve();
                 } else {

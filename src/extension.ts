@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('SpacetimeDB extension is now active!');
@@ -49,6 +50,53 @@ export function activate(context: vscode.ExtensionContext) {
         });
         context.subscriptions.push(fileWatcher);
     }
+}
+
+// Get the correct spacetime CLI command for the current platform
+function getSpacetimeCLICommand(): string {
+    const config = vscode.workspace.getConfiguration('spacetimedb');
+    const userPath = config.get<string>('spacetimeCliPath');
+    
+    if (userPath && userPath !== 'spacetime') {
+        return userPath;
+    }
+    
+    // Default platform-specific paths
+    const platform = os.platform();
+    switch (platform) {
+        case 'win32':
+            return 'spacetime.exe';
+        case 'darwin':  // macOS
+        case 'linux':
+        default:
+            return 'spacetime';
+    }
+}
+
+// Cross-platform path resolution
+function resolvePath(inputPath: string, workspaceRoot: string): string {
+    if (path.isAbsolute(inputPath)) {
+        return inputPath;
+    }
+    return path.resolve(workspaceRoot, inputPath);
+}
+
+// Detect if this is a Unity project
+function isUnityProject(workspacePath: string): boolean {
+    return fs.existsSync(path.join(workspacePath, 'Assets')) &&
+           fs.existsSync(path.join(workspacePath, 'ProjectSettings'));
+}
+
+// Get platform-appropriate default paths
+function getDefaultPaths(workspaceRoot: string) {
+    const isUnity = isUnityProject(workspaceRoot);
+    
+    return {
+        modulePath: './server',
+        outputPath: isUnity 
+            ? path.join('Assets', 'Scripts', 'SpacetimeDB', 'module_bindings')
+            : 'module_bindings'
+    };
 }
 
 async function createModuleClass() {
@@ -264,37 +312,42 @@ connection.SubscriptionBuilder()
 }
 
 async function generateBindings() {
-    const config = vscode.workspace.getConfiguration('spacetimedb');
-    const spacetimeCliPath = config.get<string>('spacetimeCliPath', 'spacetime');
-    const defaultModulePath = config.get<string>('defaultModulePath', './server');
-    
-    const modulePath = await vscode.window.showInputBox({
-        prompt: 'Enter path to SpacetimeDB module',
-        value: defaultModulePath
-    });
-
-    const outputPath = await vscode.window.showInputBox({
-        prompt: 'Enter output directory for bindings',
-        value: './module_bindings'
-    });
-
-    if (!modulePath || !outputPath) return;
-
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
         vscode.window.showErrorMessage('No workspace folder found');
         return;
     }
 
-    const fullModulePath = path.resolve(workspaceFolder.uri.fsPath, modulePath);
-    const fullOutputPath = path.resolve(workspaceFolder.uri.fsPath, outputPath);
+    const workspaceRoot = workspaceFolder.uri.fsPath;
+    const defaults = getDefaultPaths(workspaceRoot);
+    
+    const modulePath = await vscode.window.showInputBox({
+        prompt: 'Enter path to SpacetimeDB module',
+        value: defaults.modulePath
+    });
+
+    const outputPath = await vscode.window.showInputBox({
+        prompt: 'Enter output directory for bindings',
+        value: defaults.outputPath
+    });
+
+    if (!modulePath || !outputPath) return;
+
+    const fullModulePath = resolvePath(modulePath, workspaceRoot);
+    const fullOutputPath = resolvePath(outputPath, workspaceRoot);
 
     // Create output directory if it doesn't exist
     if (!fs.existsSync(fullOutputPath)) {
         fs.mkdirSync(fullOutputPath, { recursive: true });
     }
 
-    const command = `${spacetimeCliPath} generate --lang cs --out-dir "${fullOutputPath}" --project-path "${fullModulePath}"`;
+    const spacetimeCmd = getSpacetimeCLICommand();
+    const args = [
+        'generate',
+        '--lang', 'cs',
+        '--out-dir', fullOutputPath,
+        '--project-path', fullModulePath
+    ];
 
     vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
@@ -302,16 +355,42 @@ async function generateBindings() {
         cancellable: false
     }, async () => {
         return new Promise<void>((resolve, reject) => {
-            exec(command, { cwd: workspaceFolder.uri.fsPath }, (error, stdout, stderr) => {
-                if (error) {
-                    vscode.window.showErrorMessage(`Failed to generate bindings: ${error.message}`);
-                    reject(error);
-                } else {
+            // Use spawn instead of exec for better cross-platform support
+            const process = spawn(spacetimeCmd, args, { 
+                cwd: workspaceRoot,
+                shell: true,  // Important for Windows
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            process.stdout?.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            process.stderr?.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            process.on('close', (code) => {
+                if (code === 0) {
                     vscode.window.showInformationMessage('SpacetimeDB bindings generated successfully!');
                     console.log('stdout:', stdout);
-                    if (stderr) console.log('stderr:', stderr);
                     resolve();
+                } else {
+                    const errorMsg = `Failed to generate bindings (exit code ${code}): ${stderr || stdout}`;
+                    vscode.window.showErrorMessage(errorMsg);
+                    console.error('Error:', errorMsg);
+                    reject(new Error(errorMsg));
                 }
+            });
+
+            process.on('error', (error) => {
+                const errorMsg = `Failed to execute spacetime command: ${error.message}`;
+                vscode.window.showErrorMessage(errorMsg);
+                console.error('Process error:', error);
+                reject(error);
             });
         });
     });

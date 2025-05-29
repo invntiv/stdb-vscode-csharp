@@ -3,7 +3,19 @@
   "displayName": "SpacetimeDB C# Support",
   "description": "IntelliSense, snippets, and tooling for SpacetimeDB C# modules and clients",
   "version": "1.0.0",
-  "publisher": "spacetimedb",
+  "publisher": "invntiv",
+  "author": {
+    "name": "invntiv"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/invntiv/stdb-vscode-csharp"
+  },
+  "bugs": {
+    "url": "https://github.com/invntiv/stdb-vscode-csharp/issues"
+  },
+  "homepage": "https://github.com/invntiv/stdb-vscode-csharp#readme",
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -18,8 +30,16 @@
     "game development",
     "multiplayer",
     "csharp",
-    "unity"
+    "unity",
+    "realtime",
+    "backend",
+    "server"
   ],
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "activationEvents": [
     "onLanguage:csharp"
   ],
@@ -124,7 +144,9 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src --ext ts --ignore-pattern src/test"
+    "lint": "eslint src --ext ts --ignore-pattern src/test",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
